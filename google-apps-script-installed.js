@@ -1,6 +1,6 @@
 const DEFAULT_SHEET_NAME = "Data Account";
 
-function doPost(e) {
+function workspaceLegacyPost_(e) {
   const data = parsePayload_(e);
   if (data.action === "ledgerDevice") return ledgerDeviceBridge_(data);
   if (data.action === "outstandingBridge") return outstandingBridge_(data);
@@ -52,7 +52,7 @@ function doPost(e) {
   } finally {jobLock.releaseLock();}
 }
 
-function doGet(e) {
+function workspaceLegacyGet_(e) {
   const params = e && e.parameter ? e.parameter : {};
   if (params.action === "ledgerLoginProbe") return ledgerLoginProbePage_();
   if (params.action === "outstandingOwner") return outstandingOwnerPage_();
@@ -166,7 +166,7 @@ function findRowById_(sheet, id) {
 }
 
 function getSheet_(sheetName) {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const spreadsheet = SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('PRINT_REPORT_SPREADSHEET_ID'));
   const targetSheetName = sanitizeSheetName_(sheetName) || DEFAULT_SHEET_NAME;
   let sheet = spreadsheet.getSheetByName(targetSheetName);
   const headers = [
@@ -263,7 +263,7 @@ function saveProfile_(profile) {
 }
 
 function getProfileSheet_() {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const spreadsheet = SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('PRINT_REPORT_SPREADSHEET_ID'));
   let sheet = spreadsheet.getSheetByName("Profile");
   if (!sheet) {
     sheet = spreadsheet.insertSheet("Profile");
@@ -322,7 +322,7 @@ function findVaultRowById_(sheet, id) {
 }
 
 function getVaultSheet_(sheetName) {
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const spreadsheet = SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('PRINT_REPORT_SPREADSHEET_ID'));
   const targetSheetName = sanitizeSheetName_(sheetName) || "SecureVault";
   let sheet = spreadsheet.getSheetByName(targetSheetName);
   const headers = ["ID", "updatedAt", "itemCount", "encryptedVault", "source"];
@@ -513,7 +513,7 @@ function jobImageSave_(data,existing){
   var match=/^data:image\/(webp|jpeg|png);base64,([A-Za-z0-9+/=]+)$/.exec(String(data.jobImageDataUrl));
   if(!match||!/^[a-zA-Z0-9-]{8,80}$/.test(String(image.uploadKey||'')))throw new Error('ชนิดรูปงานไม่ถูกต้อง');
   var bytes=Utilities.base64Decode(match[2]);if(bytes.length>700*1024)throw new Error('รูปงานต้องไม่เกิน 700 KB หลังบีบอัด');
-  var folder=getOrCreateFolder_('Print Job Reference Images'),ext=match[1]==='jpeg'?'jpg':match[1];
+  var folder=DriveApp.getFolderById(PropertiesService.getScriptProperties().getProperty('PRINT_OS_JOB_IMAGES_FOLDER')),ext=match[1]==='jpeg'?'jpg':match[1];
   var name=sanitizeFileNamePart_(data.sheetName||DEFAULT_SHEET_NAME)+'-'+sanitizeFileNamePart_(data.id)+'-'+image.uploadKey+'.'+ext;
   var found=folder.getFilesByName(name),file=found.hasNext()?found.next():folder.createFile(Utilities.newBlob(bytes,'image/'+match[1],name));
   return JSON.stringify({name:String(image.name||name).slice(0,200),type:'image/'+match[1],bytes:bytes.length,width:Number(image.width)||0,height:Number(image.height)||0,uploadKey:image.uploadKey,url:file.getUrl(),fileId:file.getId(),pending:false});

@@ -1111,6 +1111,8 @@
       }
     }
   </style>
+<script src="outstanding-owner-client.js?v=workspace1"></script><script src="accounts-cloud.js?v=workspace1"></script>
+<script src="workspace-access.js?v=workspace1"></script>
 </head>
 <body>
   <div id="root"></div>
@@ -1125,7 +1127,7 @@
     const DRIVE_BACKUP_AUTO_KEY = "printos.secureVault.driveBackupAuto.v1";
     const ACCOUNT_REGISTRY_KEY = "printos.secureVault.accounts.v1";
     const ACTIVE_ACCOUNT_KEY = "printos.secureVault.activeAccount.v1";
-    const DEFAULT_SHEET_URL = "https://script.google.com/macros/s/AKfycbzDF5-Kvqf03RLCxpToRL7C9PAqlfhUvC_xLgnEExF7H4go7gybvzLaKDwtKVBHl6if/exec";
+    const DEFAULT_SHEET_URL = "https://script.google.com/macros/s/AKfycbxj8-z2pSLUOPy5dR8AQ-_rgMkEj7kkpIw5eMV3xoE8zyoNzMXP5fGEXzRl61qOCcHZ/exec";
     const VAULT_SHEET_NAME = "SecureVault";
     const SOCIAL_AUTH_CONFIG = {
       firebase: {
@@ -1576,12 +1578,7 @@
           return false;
         }
         try {
-          await fetch(url, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify({
-              action: "vaultSave",
+          await WorkspaceAccess.call('vaultSave', {
               sheetName: VAULT_SHEET_NAME,
               id: account ? `secure-vault-${account.id}` : "secure-vault",
               itemCount: nextEntries.filter(item => !item.deleted).length,
@@ -1594,8 +1591,7 @@
                 displayName: account.displayName,
                 storageKey: account.storageKey
               } : null
-            })
-          });
+            });
           if (!silent) notify("ซิงก์ข้อมูลเข้ารหัสไป Google Sheet แล้ว");
           return true;
         } catch (error) {
@@ -1613,12 +1609,7 @@
           return false;
         }
         try {
-          await fetch(url, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify({
-              action: "vaultBackupDrive",
+          await WorkspaceAccess.call('vaultBackupDrive', {
               folderName: "Secure Vault Backups",
               id: "secure-vault",
               itemCount: nextEntries.filter(item => !item.deleted).length,
@@ -1632,8 +1623,7 @@
                 displayName: account.displayName,
                 storageKey: account.storageKey
               } : null
-            })
-          });
+            });
           if (!silent) notify("ส่งข้อมูลเข้ารหัสไปสำรองใน Google Drive แล้ว");
           return true;
         } catch (error) {
@@ -1657,13 +1647,7 @@
           notify("ยังไม่ได้ตั้งค่า Google Sheet URL");
           return;
         }
-        const callbackName = `vaultSheetCallback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        const script = document.createElement("script");
-        const cleanup = () => {
-          delete window[callbackName];
-          script.remove();
-        };
-        window[callbackName] = payload => {
+        WorkspaceAccess.call('vaultGet', {id:'secure-vault'}).then(payload => {
           try {
             if (!payload || !payload.ok || !payload.vault || !payload.vault.encryptedVault) {
               notify("ไม่พบข้อมูล Vault ใน Google Sheet");
@@ -1678,21 +1662,10 @@
             setVisibleIds(new Set());
             setMode("locked");
             notify("โหลดข้อมูลเข้ารหัสจาก Sheets แล้ว กรุณาใส่รหัสหลักเดิม");
-          } finally {
-            cleanup();
+          } catch (error) {
+            notify(error.message || "โหลดจาก Sheets ไม่สำเร็จ");
           }
-        };
-        const sheetUrl = new URL(url);
-        sheetUrl.searchParams.set("action", "vaultLoad");
-        sheetUrl.searchParams.set("sheetName", VAULT_SHEET_NAME);
-        sheetUrl.searchParams.set("id", "secure-vault");
-        sheetUrl.searchParams.set("callback", callbackName);
-        script.src = sheetUrl.toString();
-        script.onerror = () => {
-          cleanup();
-          notify("โหลดจาก Sheets ไม่สำเร็จ");
-        };
-        document.body.appendChild(script);
+        }).catch(error => notify(error.message || "โหลดจาก Sheets ไม่สำเร็จ"));
       }
 
       function importBackup(file) {

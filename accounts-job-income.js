@@ -1,8 +1,8 @@
 /* Canonical PRINCE IMAGE receipts, scoped to this deployment's owner and book 03. */
 var AccountsJobIncome=(function(){
   'use strict';
-  const endpoint='https://script.google.com/macros/s/AKfycbzDF5-Kvqf03RLCxpToRL7C9PAqlfhUvC_xLgnEExF7H4go7gybvzLaKDwtKVBHl6if/exec';
-  const owner='chokdeeprintings@gmail.com',cutoff='2026-11-07',prefix='prince-income-';
+  const endpoint='https://script.google.com/macros/s/AKfycbxj8-z2pSLUOPy5dR8AQ-_rgMkEj7kkpIw5eMV3xoE8zyoNzMXP5fGEXzRl61qOCcHZ/exec';
+  const owner='prince.image97@gmail.com',cutoff='2026-11-07',prefix='prince-income-';
   function enabled(data,scope){return scope?.endpoint===endpoint&&scope?.owner===owner&&data?.books?.find(b=>b.id==='book-3')?.name.trim()==='PRINCE IMAGE';}
   function managed(entry){return typeof entry?.id==='string'&&entry.id.startsWith(prefix);}
   function day(value){
@@ -39,12 +39,6 @@ var AccountsJobIncome=(function(){
     if(target.entries.filter(e=>!managed(e)).length+entries.length>10000)throw Error('สมุดบัญชีมีรายการเกินขอบเขต');
     const next=structuredClone(data),book=next.books.find(b=>b.id==='book-3');book.entries=book.entries.filter(e=>!managed(e)).concat(entries);return {data:next,changed:true};
   }
-  function load(){return new Promise((resolve,reject)=>{
-    const callback='princeIncome_'+crypto.randomUUID().replace(/-/g,''),script=document.createElement('script');
-    const cleanup=()=>{clearTimeout(timer);delete window[callback];script.remove();};
-    const timer=setTimeout(()=>{cleanup();reject(Error('โหลดรายรับจากบันทึกงานไม่สำเร็จ กรุณากดโหลดล่าสุดอีกครั้ง'));},20000);
-    window[callback]=payload=>{cleanup();resolve(payload);};script.onerror=()=>{cleanup();reject(Error('เชื่อมต่อบันทึกงานไม่สำเร็จ'));};
-    const url=new URL(endpoint);url.searchParams.set('action','list');url.searchParams.set('sheetName','Data Account');url.searchParams.set('callback',callback);url.searchParams.set('_',String(Date.now()));script.src=url.href;document.body.appendChild(script);
-  });}
+  function load(){return AccountsCloud.workspace('jobList',{sheetName:'Data Account'});}
   return {enabled,managed,merge,load};
 })();

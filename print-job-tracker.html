@@ -1280,6 +1280,8 @@
       }
     }
   </style>
+<script src="outstanding-owner-client.js?v=workspace1"></script><script src="accounts-cloud.js?v=workspace1"></script>
+<script src="workspace-access.js?v=workspace1"></script>
 </head>
 <body>
   <main class="app">
@@ -1669,7 +1671,7 @@
     const URL_KEY = "print_job_tracker_sheet_url_v1";
     const THEME_KEY = "print_job_tracker_theme_v1";
     const SHEET_TAB_NAME = "";
-    const DEFAULT_SHEET_URL = "https://script.google.com/macros/s/AKfycbzDF5-Kvqf03RLCxpToRL7C9PAqlfhUvC_xLgnEExF7H4go7gybvzLaKDwtKVBHl6if/exec";
+    const DEFAULT_SHEET_URL = "https://script.google.com/macros/s/AKfycbxj8-z2pSLUOPy5dR8AQ-_rgMkEj7kkpIw5eMV3xoE8zyoNzMXP5fGEXzRl61qOCcHZ/exec";
     const AUTO_COST_PER_SQM = 10;
     const CATEGORY_DEFAULTS = {
       "ไวนิล": { saleRate: 80, materialCost: 21 },
@@ -1872,15 +1874,11 @@
     }
 
     function loadRecords() {
-      try {
-        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-      } catch {
-        return [];
-      }
+      return [];
     }
 
     function saveRecords() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+      // Customer records remain in memory on the authenticated page.
     }
 
     function calcFromInputs() {
@@ -2321,12 +2319,7 @@
       if (!url) return false;
 
       updateSyncStatus("กำลังซิงก์...");
-      await fetch(url, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(record)
-      });
+      await WorkspaceAccess.call('jobSave', {...(record), sheetName: SHEET_TAB_NAME});
       updateSyncStatus("ซิงก์ล่าสุดแล้ว");
       return true;
     }
@@ -2336,12 +2329,7 @@
       if (!url) return false;
 
       updateSyncStatus("กำลังลบจาก Sheets...");
-      await fetch(url, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ ...record, action: "delete" })
-      });
+      await WorkspaceAccess.call('jobDelete', {...({ ...record, action: "delete" }), sheetName: SHEET_TAB_NAME});
       updateSyncStatus("ลบจาก Sheets แล้ว");
       return true;
     }
@@ -2461,41 +2449,8 @@
       render();
     }
 
-    function sheetListUrl(callbackName) {
-      const url = new URL(getSheetUrl());
-      url.searchParams.set("action", "list");
-      url.searchParams.set("callback", callbackName);
-      if (SHEET_TAB_NAME) url.searchParams.set("sheetName", SHEET_TAB_NAME);
-      return url.toString();
-    }
-
     function loadSheetPayload() {
-      return new Promise((resolve, reject) => {
-        const callbackName = `sheetCallback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        const script = document.createElement("script");
-        const timer = window.setTimeout(() => {
-          cleanup();
-          reject(new Error("Sheet load timeout"));
-        }, 15000);
-
-        function cleanup() {
-          window.clearTimeout(timer);
-          delete window[callbackName];
-          script.remove();
-        }
-
-        window[callbackName] = payload => {
-          cleanup();
-          resolve(payload);
-        };
-
-        script.onerror = () => {
-          cleanup();
-          reject(new Error("Cannot load sheet data"));
-        };
-        script.src = sheetListUrl(callbackName);
-        document.body.appendChild(script);
-      });
+      return WorkspaceAccess.call('jobList', {sheetName: SHEET_TAB_NAME});
     }
 
     function dateInputValue(value) {
@@ -3079,7 +3034,7 @@
     refreshUxSelects();
     updatePreview();
     render();
-    autoLoadFromSheet();
+    WorkspaceAccess.mount(autoLoadFromSheet);
   </script>
 </body>
 </html>

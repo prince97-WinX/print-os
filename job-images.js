@@ -45,6 +45,12 @@ var JobImages=(function(){
     try{
       let blob=id?null:stage?.blob;
       if(id){try{const saved=await cache('get',id);blob=saved?.uploadKey===item.uploadKey?saved.blob:null;}catch{ /* Synced images can still use their private Drive preview. */ }}
+      if(!blob && id && typeof WorkspaceAccess!=='undefined'){
+        const result=await WorkspaceAccess.call('jobImage',{sheetName:SHEET_TAB_NAME,id:String(id)});
+        const match=/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(result.dataUrl||'');
+        if(!match)throw Error('ไม่พบข้อมูลรูปงาน');
+        blob=new Blob([Uint8Array.from(atob(match[2]),character=>character.charCodeAt(0))],{type:match[1]});
+      }
       if(!dialog.open)return;
       if(blob){const image=document.createElement('img');objectUrl=URL.createObjectURL(blob);image.alt=item.name;image.onload=()=>{status.hidden=true;};image.onerror=()=>{status.hidden=false;status.textContent='โหลดรูปไม่สำเร็จ กรุณาปิดแล้วลองอีกครั้ง';};image.src=objectUrl;body.append(image);}
       else{

@@ -2,14 +2,14 @@
 function orRequireOwner_() {
   const active=String(Session.getActiveUser().getEmail() || '').toLowerCase();
   const owner=String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
-  if(!active || active!==owner || active!=='chokdeeprintings@gmail.com') {
-    throw new Error('กรุณาเข้าสู่ Google ด้วยบัญชีเจ้าของร้าน chokdeeprintings@gmail.com แล้วกดส่งอีกครั้ง');
+  if(!active || active!==owner || active!=='prince.image97@gmail.com') {
+    throw new Error('กรุณาเข้าสู่ Google ด้วยบัญชีเจ้าของร้าน prince.image97@gmail.com แล้วกดส่งอีกครั้ง');
   }
 }
 function outstandingOwnerRequest(data) {
   orRequireOwner_();
   if(!data || !/^[a-zA-Z0-9_-]{20,100}$/.test(data.id || '') || !['previewSend','save','list','remove','recipients','addRecipient','removeRecipient','getPaymentChannels','savePaymentChannels','ledgerGet','ledgerSave','ledgerSlipGet','ledgerDeviceEnroll','ledgerLoginStart'].includes(data.action)) throw new Error('คำขอไม่ถูกต้อง');
-  if(orProperties_().getProperty('PRINT_REPORT_STORE_CONFIRMED')!=='true') throw new Error('Store not confirmed');
+  if(!['ledgerLoginStart','ledgerDeviceEnroll','ledgerGet','ledgerSave','ledgerSlipGet','getPaymentChannels','savePaymentChannels'].includes(data.action) && orProperties_().getProperty('PRINT_REPORT_STORE_CONFIRMED')!=='true') throw new Error('Store not confirmed');
   if(data.action==='ledgerLoginStart')return ledgerLoginSession(data);
   const lock=LockService.getScriptLock();lock.waitLock(30000);
   try {
@@ -26,7 +26,7 @@ function outstandingOwnerRequest(data) {
 }
 function verifyOutstandingOwnerSetup() {
   const active=Session.getActiveUser().getEmail();
-  if(active!=='chokdeeprintings@gmail.com') throw new Error('Wrong Google owner');
+  if(active!=='prince.image97@gmail.com') throw new Error('Wrong Google owner');
   const rows=orRecords_();
   console.log('Owner verified. Report rows: '+rows.length+'. No LINE message sent.');
 }
@@ -44,7 +44,7 @@ function outstandingOwnerPage_() {
   <script>
   let running=false;
   window.addEventListener('message',event=>{
-    if(event.origin!=='https://chokdee-creator.github.io' || !event.source || !event.data) return;
+    if(event.origin!=='https://prince97-winx.github.io' || !event.source || !event.data) return;
     if(event.data.type==='PRINT_OUTSTANDING_HELLO'){event.source.postMessage({type:'PRINT_OUTSTANDING_READY',id:event.data.id},event.origin);return;}
     if(event.data.type!=='PRINT_OUTSTANDING_REQUEST')return;
     const request=event.data.request;
