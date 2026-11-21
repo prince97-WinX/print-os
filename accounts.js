@@ -4,6 +4,40 @@
 const KEY='printOS:notebooks:v1',colors=['#416854','#b49161','#64838e'],$=id=>document.getElementById(id),money=n=>new Intl.NumberFormat('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n/100),today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 const fresh=()=>({version:1,books:[1,2,3].map(n=>({id:'book-'+n,name:'สมุดบัญชี '+n,entries:[]}))});
 const validDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s))&&new Date(s).toISOString().slice(0,10)===s;
+const VEYRON_DRAFT_KEY='printOS:veyron-entry-draft';
+function readVeyronDraft(){
+ const params=new URLSearchParams(location.hash.slice(1));
+ let raw=params.get('veyronDraft');
+ if(raw!==null){
+  history.replaceState(history.state,'',location.pathname+location.search);
+  try{sessionStorage.removeItem(VEYRON_DRAFT_KEY);}catch(error){}
+ }else{
+  try{raw=sessionStorage.getItem(VEYRON_DRAFT_KEY);}catch(error){}
+ }
+ if(!raw||raw.length>1024)return null;
+ try{
+  const {id,type,name,amount}=JSON.parse(raw);
+  if(typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)||!['income','expense'].includes(type)||
+     typeof name!=='string'||!name.trim()||name.length>160||!Number.isSafeInteger(amount)||amount<1||amount>99999999999)return null;
+  const draft={id,type,name:name.trim(),amount};
+  try{sessionStorage.setItem(VEYRON_DRAFT_KEY,JSON.stringify(draft));}catch(error){}
+  return draft;
+ }catch(error){return null;}
+}
+let veyronDraft=readVeyronDraft(),activeVeyronDraft=null;
+function clearVeyronDraft(){
+ veyronDraft=null;
+ try{sessionStorage.removeItem(VEYRON_DRAFT_KEY);}catch(error){}
+}
+function offerVeyronDraft(){
+ if(!veyronDraft||!AccountsCloud.isReady()||loadFailed||document.querySelector('dialog[open]'))return;
+ if(state.books.some(book=>book.entries.some(entry=>entry.id===veyronDraft.id))){
+  clearVeyronDraft();
+  toast('รายการจากเวย์รอนนี้บันทึกไว้แล้ว');
+  return;
+ }
+ openEntry(undefined,veyronDraft);
+}
 function validate(data){if(data?.version!==1||!Array.isArray(data.books)||data.books.length<3||data.books.length>100)throw Error('ข้อมูลสมุดบัญชีไม่ถูกต้อง');const ids=new Set(),bookIds=new Set();data.books.forEach((b,i)=>{if(!b||(i<3 ? b.id!=='book-'+(i+1) : typeof b.id!=='string'||!/^book-[a-f0-9]{32}$/.test(b.id)||bookIds.has(b.id))||typeof b.name!=='string'||!b.name.trim()||b.name.length>50||!Array.isArray(b.entries))throw Error('ข้อมูลสมุดบัญชีไม่ถูกต้อง');bookIds.add(b.id);b.entries.forEach(e=>{if(typeof e.id!=='string'||ids.has(e.id)||!['income','expense'].includes(e.type)||!validDate(e.date)||typeof e.name!=='string'||!e.name.trim()||typeof e.note!=='string'||!Number.isSafeInteger(e.amount)||e.amount<=0||e.amount>99999999999)throw Error('ข้อมูลรายการไม่ถูกต้อง');if(e.recipient!==undefined&&(typeof e.recipient!=='string'||e.recipient.length>160))throw Error('ชื่อบัญชีผู้รับไม่ถูกต้อง');if(e.slip&&(!e.slip.id||typeof e.slip.id!=="string"||typeof e.slip.name!=="string"||!Number.isSafeInteger(e.slip.size)))throw Error("ข้อมูลสลิปไม่ถูกต้อง");ids.add(e.id);});});return data;}
 let state=fresh(),loadFailed=false,selected='book-1',filter='all',type='income',editing=null,renaming=null,toastTimer,draftSlip=null,slipBlob=null,slipBusy=false,savingEntry=false,slipVersion=0,slipUrl=null,viewerUrl=null,ocrController=null,amountRevision=0,recipientRevision=0,typeRevision=0;
 try{const raw=localStorage.getItem(KEY);if(raw)state=validate(JSON.parse(raw));}catch(error){loadFailed=true;}
@@ -28,7 +62,28 @@ function renderEntries(){
  $('empty').hidden=!!entries.length;const filtered=book().entries.length>0;$('empty').querySelector('h3').textContent=filtered?'ไม่พบรายการที่ค้นหา':'เริ่มต้นสมุดเล่มนี้';$('empty').querySelector('p').textContent=filtered?'ลองเปลี่ยนคำค้น ช่วงเวลา หรือประเภทรายการ':'บันทึกรายรับหรือรายจ่ายรายการแรกของคุณ';$('emptyAdd').hidden=filtered;$('shownCount').textContent=entries.length+' จาก '+book().entries.length+' รายการ';
 }
 function setType(next){type=next;document.querySelectorAll('[data-type]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.type===type)));}
-function openEntry(entry){if(AccountsJobIncome.managed(entry)){toast("รายการนี้อัปเดตจากบันทึกงาน กรุณาแก้ไขยอดที่หน้าบันทึกงาน PRINCE IMAGE");return;}if(savingEntry){toast("กำลังบันทึกรายการ กรุณารอสักครู่");return;}editing=entry?{id:entry.id,bookId:selected}:null;$('entryDialogTitle').textContent=entry?'แก้ไขรายการ':'เพิ่มรายการ';$('entryBook').replaceChildren(...state.books.map(b=>{const o=el('option','',b.name);o.value=b.id;return o;}));$('entryBook').value=selected;$('entryDate').value=entry?.date||today();$('entryName').value=entry?.name||'';$('entryAmount').value=entry?String(entry.amount/100):'';$('entryRecipient').value=entry?.recipient||'';$('entryNote').value=entry?.note||'';resetSlip(entry?.slip||null);$('entryError').textContent='';$('deleteEntry').hidden=!entry;setType(entry?.type||'income');$('entryDialog').showModal();$('entryName').focus();}
+function openEntry(entry,draft=null){
+ if(AccountsJobIncome.managed(entry)){toast("รายการนี้อัปเดตจากบันทึกงาน กรุณาแก้ไขยอดที่หน้าบันทึกงาน PRINCE IMAGE");return;}
+ if(savingEntry){toast("กำลังบันทึกรายการ กรุณารอสักครู่");return;}
+ activeVeyronDraft=draft;
+ editing=entry?{id:entry.id,bookId:selected}:null;
+ $('entryDialogTitle').textContent=draft?'ตรวจรายการจากเวย์รอน':entry?'แก้ไขรายการ':'เพิ่มรายการ';
+ $('entryBook').replaceChildren(...state.books.map(b=>{const o=el('option','',b.name);o.value=b.id;return o;}));
+ if(draft){
+  const placeholder=el('option','','เลือกสมุดบัญชีก่อนบันทึก');
+  placeholder.value='';placeholder.disabled=true;
+  $('entryBook').prepend(placeholder);
+ }
+ $('entryBook').value=draft?'':selected;
+ const values=draft||entry;
+ $('entryDate').value=entry?.date||today();
+ $('entryName').value=values?.name||'';
+ $('entryAmount').value=values?String(values.amount/100):'';
+ $('entryRecipient').value=entry?.recipient||'';$('entryNote').value=entry?.note||'';
+ resetSlip(entry?.slip||null);$('entryError').textContent='';$('deleteEntry').hidden=!entry;
+ setType(values?.type||'income');$('entryDialog').showModal();
+ $(draft?'entryBook':'entryName').focus();
+}
 function openBookDialog(id=null){
  renaming=id;
  $('bookDialogTitle').textContent=id?'เปลี่ยนชื่อสมุดบัญชี':'เพิ่มบัญชี';
@@ -41,7 +96,7 @@ function openBookDialog(id=null){
 }
 $('newEntry').onclick=()=>openEntry();$('emptyAdd').onclick=()=>openEntry();$('renameBook').onclick=()=>openBookDialog(selected);
 $('newBook').onclick=()=>openBookDialog();
-$('entryForm').onsubmit=async event=>{event.preventDefault();if(slipBusy||savingEntry)return;clearSlipRead();savingEntry=true;const submit=$('entryForm').querySelector('[type=submit]');submit.disabled=true;try{const name=$('entryName').value.trim(),raw=$('entryAmount').value;if(!name)throw Error('กรุณาระบุชื่อรายการ');if(!/^\d+(?:\.\d{1,2})?$/.test(raw))throw Error('กรอกจำนวนเงินไม่เกิน 2 ตำแหน่งทศนิยม');const [whole,decimal='']=raw.split('.'),amount=Number(whole)*100+Number(decimal.padEnd(2,'0'));if(!Number.isSafeInteger(amount)||amount<=0||amount>99999999999)throw Error('กรอกจำนวนเงินระหว่าง 0.01 ถึง 999,999,999.99 บาท');if(!validDate($('entryDate').value))throw Error('กรุณาระบุวันที่ให้ถูกต้อง');const next=structuredClone(state),target=next.books.find(b=>b.id===$('entryBook').value);if(!target)throw Error('ไม่พบสมุดบัญชี');let existing;if(editing){const source=next.books.find(b=>b.id===editing.bookId),index=source.entries.findIndex(e=>e.id===editing.id);if(index<0)throw Error('รายการนี้มีการเปลี่ยนแปลง กรุณาเปิดรายการใหม่');existing=source.entries.splice(index,1)[0];}const savedSlip=draftSlip?{...draftSlip}:undefined,oldSlip=existing?.slip;if(slipBlob&&savedSlip)await AccountSlips.put({...savedSlip,blob:slipBlob});target.entries.push({slip:savedSlip,id:existing?.id||crypto.randomUUID(),name,amount,type,recipient:$('entryRecipient').value.trim(),date:$('entryDate').value,note:$('entryNote').value.trim(),createdAt:existing?.createdAt||new Date().toISOString()});await save(next);if(oldSlip&&oldSlip.id!==savedSlip?.id)AccountSlips.remove(oldSlip.id).catch(()=>{});selected=target.id;render();$('entryDialog').close();toast(editing?'แก้ไขรายการแล้ว':'บันทึกรายการแล้ว');}catch(error){$('entryError').textContent=error.message;}finally{savingEntry=false;submit.disabled=false;}};
+$('entryForm').onsubmit=async event=>{event.preventDefault();if(slipBusy||savingEntry)return;clearSlipRead();savingEntry=true;const submit=$('entryForm').querySelector('[type=submit]');submit.disabled=true;try{const name=$('entryName').value.trim(),raw=$('entryAmount').value;if(!name)throw Error('กรุณาระบุชื่อรายการ');if(!/^\d+(?:\.\d{1,2})?$/.test(raw))throw Error('กรอกจำนวนเงินไม่เกิน 2 ตำแหน่งทศนิยม');const [whole,decimal='']=raw.split('.'),amount=Number(whole)*100+Number(decimal.padEnd(2,'0'));if(!Number.isSafeInteger(amount)||amount<=0||amount>99999999999)throw Error('กรอกจำนวนเงินระหว่าง 0.01 ถึง 999,999,999.99 บาท');if(!validDate($('entryDate').value))throw Error('กรุณาระบุวันที่ให้ถูกต้อง');const next=structuredClone(state),target=next.books.find(b=>b.id===$('entryBook').value);if(!target)throw Error('ไม่พบสมุดบัญชี');let existing;if(editing){const source=next.books.find(b=>b.id===editing.bookId),index=source.entries.findIndex(e=>e.id===editing.id);if(index<0)throw Error('รายการนี้มีการเปลี่ยนแปลง กรุณาเปิดรายการใหม่');existing=source.entries.splice(index,1)[0];}const savedSlip=draftSlip?{...draftSlip}:undefined,oldSlip=existing?.slip;if(slipBlob&&savedSlip)await AccountSlips.put({...savedSlip,blob:slipBlob});if(activeVeyronDraft&&state.books.some(book=>book.entries.some(entry=>entry.id===activeVeyronDraft.id)))throw Error('รายการจากเวย์รอนนี้บันทึกไว้แล้ว');target.entries.push({slip:savedSlip,id:existing?.id||activeVeyronDraft?.id||crypto.randomUUID(),name,amount,type,recipient:$('entryRecipient').value.trim(),date:$('entryDate').value,note:$('entryNote').value.trim(),createdAt:existing?.createdAt||new Date().toISOString()});await save(next);if(oldSlip&&oldSlip.id!==savedSlip?.id)AccountSlips.remove(oldSlip.id).catch(()=>{});selected=target.id;render();$('entryDialog').close();toast(editing?'แก้ไขรายการแล้ว':'บันทึกรายการแล้ว');}catch(error){$('entryError').textContent=error.message;}finally{savingEntry=false;submit.disabled=false;}};
 $('renameForm').onsubmit=async event=>{
  event.preventDefault();
  const form=$('renameForm'),submit=$('saveBook'),errorText=$('renameError');
@@ -121,7 +176,7 @@ async function viewSlip(meta,blob){const viewer=$('slipViewer');$('slipFullImage
 $('slipReadAgain').onclick=()=>{if(slipBlob&&!slipBusy&&!savingEntry)readSlipAmount(slipBlob,slipVersion);};
 $('slipDrop').onclick=$('slipReplace').onclick=()=>$('slipFile').click();$('slipFile').onchange=()=>chooseSlip($('slipFile').files[0]);$('slipRemove').onclick=()=>resetSlip(null);$('slipView').onclick=()=>{if(draftSlip)viewSlip(draftSlip,slipBlob);};
 const drop=$('slipDrop');for(const event of ['dragenter','dragover'])drop.addEventListener(event,e=>{e.preventDefault();if(!slipBusy)drop.classList.add('drag-over');});for(const event of ['dragleave','drop'])drop.addEventListener(event,e=>{e.preventDefault();drop.classList.remove('drag-over');});drop.addEventListener('drop',e=>{const files=e.dataTransfer.files;if(files.length>1){$('slipError').textContent='แนบได้ 1 รูปต่อรายการ กรุณาเลือกสลิปเพียงรูปเดียว';return;}chooseSlip(files[0]);});
-$('entryDialog').addEventListener('close',()=>{clearSlipRead();++slipVersion;slipControls(false);revokePreview();});$('slipViewer').addEventListener('close',()=>{if(viewerUrl)URL.revokeObjectURL(viewerUrl);viewerUrl=null;$('slipFullImage').removeAttribute('src');});
+$('entryDialog').addEventListener('close',()=>{if(activeVeyronDraft){activeVeyronDraft=null;clearVeyronDraft();}clearSlipRead();++slipVersion;slipControls(false);revokePreview();});$('slipViewer').addEventListener('close',()=>{if(viewerUrl)URL.revokeObjectURL(viewerUrl);viewerUrl=null;$('slipFullImage').removeAttribute('src');});
 
 
 let migrationSource=null,connecting=false;
@@ -129,9 +184,10 @@ function syncStatus(connected,updatedAt){$('syncBadge').classList.toggle('connec
 async function getSlip(meta){let item=await AccountSlips.read(meta.id);if(!item&&meta.cloud)item=await AccountsCloud.slip(meta);return item;}
 function archiveLocal(){try{if(!localStorage.getItem(KEY+':beforeGoogle')){const old=localStorage.getItem(KEY);if(old)localStorage.setItem(KEY+':beforeGoogle',old);}}catch(error){}}
 function adoptCloud(data){validate(data);archiveLocal();AccountsCloud.accept(data);cacheGoogle(data);syncStatus(true,data.updatedAt);}
-async function connectGoogle(automatic=false){if(connecting||savingEntry||(automatic&&document.querySelector('dialog[open]')))return;connecting=true;const button=$('connectGoogle');button.disabled=true;button.textContent='กำลังเชื่อม…';$('newEntry').disabled=true;$('newBook').disabled=true;document.querySelector('.ledger').inert=true;document.querySelector('.cloud-bar').classList.add('syncing');$('syncDetail').textContent='กำลังตรวจการล็อกอินและโหลดข้อมูลบัญชี…';try{const remote=await AccountsCloud.load();validate(remote);const localHasData=state.books.length>3||state.books.some((b,i)=>b.entries.length||b.name!=='สมุดบัญชี '+(i+1));if(!AccountsCloud.wasConnected()&&localHasData&&!loadFailed){migrationSource=remote;$('migrationSummary').textContent='พบรายการในเครื่อง '+state.books.reduce((n,b)=>n+b.entries.length,0)+' รายการ และบน Google '+remote.books.reduce((n,b)=>n+b.entries.length,0)+' รายการ';$('migrationError').textContent='';$('migrationDialog').showModal();$('syncDetail').textContent='พบข้อมูลเดิมในเครื่อง เลือกรวมข้อมูลขึ้น Google เพื่อเริ่มใช้งาน';}else{adoptCloud(remote);if(AccountsJobIncome.enabled(remote,AccountsCloud.incomeScope())){const result=await AccountsJobIncome.merge(remote,await AccountsJobIncome.load(),AccountsCloud.incomeScope());if(result.changed)await save(result.data);}if(!automatic)toast('โหลดสมุดบัญชีและรายรับล่าสุดแล้ว');}}catch(error){$('syncDetail').textContent=error.message;if(error.needsPair){syncStatus(false);showPairDialog();}else document.querySelector('.cloud-bar').classList.add('error');}finally{connecting=false;button.disabled=false;button.textContent=AccountsCloud.isReady()?'โหลดล่าสุด':'เข้าใช้งาน';$('newEntry').disabled=false;$('newBook').disabled=false;document.querySelector('.ledger').inert=false;document.querySelector('.cloud-bar').classList.remove('syncing');}}
+async function connectGoogle(automatic=false){if(connecting||savingEntry||(automatic&&document.querySelector('dialog[open]')))return;connecting=true;const button=$('connectGoogle');button.disabled=true;button.textContent='กำลังเชื่อม…';$('newEntry').disabled=true;$('newBook').disabled=true;document.querySelector('.ledger').inert=true;document.querySelector('.cloud-bar').classList.add('syncing');$('syncDetail').textContent='กำลังตรวจการล็อกอินและโหลดข้อมูลบัญชี…';try{const remote=await AccountsCloud.load();validate(remote);const localHasData=state.books.length>3||state.books.some((b,i)=>b.entries.length||b.name!=='สมุดบัญชี '+(i+1));if(!AccountsCloud.wasConnected()&&localHasData&&!loadFailed){migrationSource=remote;$('migrationSummary').textContent='พบรายการในเครื่อง '+state.books.reduce((n,b)=>n+b.entries.length,0)+' รายการ และบน Google '+remote.books.reduce((n,b)=>n+b.entries.length,0)+' รายการ';$('migrationError').textContent='';$('migrationDialog').showModal();$('syncDetail').textContent='พบข้อมูลเดิมในเครื่อง เลือกรวมข้อมูลขึ้น Google เพื่อเริ่มใช้งาน';}else{adoptCloud(remote);if(AccountsJobIncome.enabled(remote,AccountsCloud.incomeScope())){const result=await AccountsJobIncome.merge(remote,await AccountsJobIncome.load(),AccountsCloud.incomeScope());if(result.changed)await save(result.data);}if(!automatic)toast('โหลดสมุดบัญชีและรายรับล่าสุดแล้ว');}}catch(error){$('syncDetail').textContent=error.message;if(error.needsPair){syncStatus(false);showPairDialog();}else document.querySelector('.cloud-bar').classList.add('error');}finally{connecting=false;button.disabled=false;button.textContent=AccountsCloud.isReady()?'โหลดล่าสุด':'เข้าใช้งาน';$('newEntry').disabled=false;$('newBook').disabled=false;document.querySelector('.ledger').inert=false;document.querySelector('.cloud-bar').classList.remove('syncing');offerVeyronDraft();}}
 $('connectGoogle').onclick=()=>connectGoogle();
 $('importLocal').onclick=async()=>{const button=$('importLocal');if(button.disabled||!migrationSource)return;button.disabled=true;try{const merged=structuredClone(migrationSource),ids=new Set(merged.books.flatMap(b=>b.entries.map(e=>e.id)));state.books.forEach((b,i)=>{let target=merged.books.find(book=>book.id===b.id);if(!target){target={id:b.id,name:b.name,entries:[]};merged.books.push(target);}if(i<3&&!target.entries.length&&target.name==='สมุดบัญชี '+(i+1))target.name=b.name;for(const e of b.entries)if(!ids.has(e.id)){target.entries.push(e);ids.add(e.id);}});validate(merged);AccountsCloud.stage(migrationSource);const saved=await AccountsCloud.save(merged);adoptCloud(saved);$('migrationDialog').close();migrationSource=null;toast('รวมบัญชีและสลิปบน Google แล้ว');}catch(error){AccountsCloud.disconnect();$('migrationError').textContent=error.message;}finally{button.disabled=false;}};
+$('migrationDialog').addEventListener('close',offerVeyronDraft);
 $('migrationDialog').addEventListener('cancel',event=>{if($('importLocal').disabled)event.preventDefault();});
 
 
