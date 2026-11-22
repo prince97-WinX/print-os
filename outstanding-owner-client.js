@@ -1,5 +1,7 @@
 /* Authenticate with the existing Google session, never with credentials in the page. */
 function sendOutstandingOwnerAction(action, extra, endpoint, existingPopup) {
+  // Reading receiving accounts uses the already verified session or device.
+  if(action==='getPaymentChannels' && typeof AccountsCloud!=='undefined') return AccountsCloud.workspace('paymentChannelsGet',extra||{});
   const id=crypto.randomUUID().replace(/-/g,'');
   const request={...extra,action,id};
   if(action==='remove') request.idToRemove=extra.id;

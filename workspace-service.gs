@@ -38,6 +38,8 @@ function workspaceRequest_(request) {
         if (!['image/webp','image/jpeg','image/png'].includes(mime)) throw Error('ชนิดรูปงานไม่ถูกต้อง');
         return reply({ok:true,dataUrl:'data:'+mime+';base64,'+Utilities.base64Encode(blob.getBytes())});
       }
+      case 'paymentChannelsGet':
+        return reply(orPaymentChannelAction_({action:'getPaymentChannels',store:input.store,revision:input.revision}));
       case 'profileGet': return workspaceLegacyGet_({parameter:{action:'profile'}});
       case 'vaultGet': return workspaceLegacyGet_({parameter:{action:'vaultLoad',sheetName:'SecureVault',id:String(input.id||'')}});
       case 'profileSave':
