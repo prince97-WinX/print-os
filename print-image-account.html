@@ -1899,8 +1899,39 @@
 <link rel="stylesheet" href="responsive.css?v=20261026-image-dialog">
 <script src="accounts-cloud.js?v=workspace1"></script>
 <script src="workspace-access.js?v=workspace1"></script>
+<link rel="stylesheet" href="veyron-mobile.css">
+<script src="veyron-mobile.js"></script>
+<script>
+  if(new URLSearchParams(location.search).get("view")==="veyron"){
+    document.documentElement.classList.add("veyron-mobile-view");
+    document.title="เวย์รอน · ลงใบงาน PrintImage";
+  }
+</script>
 </head>
 <body class="prince-image">
+  <main class="veyron-mobile" id="veyronMobile" hidden>
+    <header class="veyron-mobile-header">
+      <div>
+        <h1>เวย์รอน</h1>
+        <p>ลงใบงาน PrintImage</p>
+      </div>
+      <a href="print-image-account.html">ดูรายการงาน</a>
+    </header>
+    <section class="veyron-mobile-thread" id="veyronMobileThread" aria-label="แชตลงใบงาน" tabindex="0">
+      <div id="veyronMobileMessages" role="log" aria-label="ข้อความในแชต">
+        <p class="veyron-mobile-reply">ส่งชื่อลูกค้า ประเภทงาน และขนาดพร้อมหน่วยได้เลยครับ</p>
+      </div>
+    </section>
+    <form id="veyronMobileForm" class="veyron-mobile-compose">
+      <label for="veyronMobileInput">ข้อความถึงเวย์รอน</label>
+      <p id="veyronMobileExample">เช่น ลงใบงาน คุณเอ ไวนิล 120 × 80 ซม.</p>
+      <div>
+        <textarea id="veyronMobileInput" rows="2" required maxlength="400" aria-describedby="veyronMobileExample" placeholder="พิมพ์ข้อความ" disabled></textarea>
+        <button type="submit" disabled>ส่ง</button>
+      </div>
+      <p id="veyronMobileStatus" role="status">รอยืนยันตัวตนกับ PrintImage</p>
+    </form>
+  </main>
   <main class="app">
     <header class="topbar">
       <div class="title brand-title">
@@ -3761,6 +3792,27 @@
       finally{jobSaveInProgress=false;els.form.inert=false;els.saveJob.disabled=false;billButton.disabled=false;}
     }
 
+    async function createVeyronJob(job){
+      const loaded=await loadSheetPayload();
+      const existing=(loaded.records||[]).map(normalizeSheetRecord).find(item=>item.id===job.id);
+      if(existing)return existing;
+
+      resetForm(false);
+      els.customerType.value="ลูกค้าทั่วไป";
+      els.customerName.value=job.customer;
+      els.jobName.value=job.category;
+      els.category.value=job.category;
+      els.paymentStatus.value="ค้างจ่าย";
+      applyCategoryDefaults();
+      els.printSizeSelect.value="custom";
+      applyPrintSizeChoice("custom");
+      els.customPrintWidth.value=String(job.width*100);
+      els.customPrintLength.value=String(job.length*100);
+      applyCustomPrintSize();
+      refreshUxSelects();
+      return saveJob({veyronId:job.id});
+    }
+
     function mountVeyronJob(){
       const key=new URLSearchParams(location.hash.slice(1)).get("veyronJob");
       const source=window.opener;
@@ -3775,24 +3827,7 @@
         const {job,origin}=incoming;
         let record=null;
         try{
-          const loaded=await loadSheetPayload();
-          record=(loaded.records||[]).map(normalizeSheetRecord).find(item=>item.id===key);
-          if(!record){
-            resetForm(false);
-            els.customerType.value="ลูกค้าทั่วไป";
-            els.customerName.value=job.customer;
-            els.jobName.value=job.category;
-            els.category.value=job.category;
-            els.paymentStatus.value="ค้างจ่าย";
-            applyCategoryDefaults();
-            els.printSizeSelect.value="custom";
-            applyPrintSizeChoice("custom");
-            els.customPrintWidth.value=String(job.width*100);
-            els.customPrintLength.value=String(job.length*100);
-            applyCustomPrintSize();
-            refreshUxSelects();
-            record=await saveJob({veyronId:key});
-          }
+          record=await createVeyronJob(job);
         }catch(error){toast("บันทึกใบงานจากเวย์รอนไม่สำเร็จ: "+error.message);}
         source.postMessage({type:"PRINTIMAGE_VEYRON_JOB_RESULT",id:key,status:record?"saved":"failed",reference:record?.reference||""},origin);
         autoLoadFromSheet();
@@ -4046,7 +4081,10 @@
     document.getElementById("printSelectedReceipt").addEventListener("click", printSelectedReceipt);
     document.getElementById("openInvoiceForm").addEventListener("click", openBlankInvoiceForm);
     document.getElementById("clearSelectedPayments").addEventListener("click", clearSelection);
-    WorkspaceAccess.mount(mountVeyronJob() || autoLoadFromSheet);
+    const veyronMobileReady = document.documentElement.classList.contains("veyron-mobile-view")
+      ? VeyronMobile.mount(createVeyronJob)
+      : null;
+    WorkspaceAccess.mount(veyronMobileReady || mountVeyronJob() || autoLoadFromSheet);
   </script>
 </body>
 </html>

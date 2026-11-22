@@ -1,0 +1,130 @@
+.veyron-mobile-view body > .app {
+  display: none;
+}
+
+.veyron-mobile[hidden] {
+  display: none;
+}
+
+.veyron-mobile-view body {
+  margin: 0;
+  background: #11191d;
+}
+
+.veyron-mobile {
+  color-scheme: dark;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100vh;
+  height: 100dvh;
+  max-width: 46rem;
+  margin-inline: auto;
+  color: #f3f7f6;
+  background: #151e23;
+  border-inline: 1px solid #324349;
+}
+
+.veyron-mobile-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem 1rem;
+  padding: 1.125rem 1rem;
+  border-bottom: 1px solid #324349;
+}
+
+.veyron-mobile-header h1 {
+  font-size: 1.5rem;
+  margin: 0;
+}
+
+.veyron-mobile-header p,
+.veyron-mobile-compose p {
+  margin: .25rem 0 0;
+  color: #b8c8cb;
+  font-size: .875rem;
+}
+
+.veyron-mobile-header a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: #a5e7d2;
+}
+
+.veyron-mobile-thread {
+  overflow-y: auto;
+  padding: 1rem;
+  overscroll-behavior-y: contain;
+}
+
+.veyron-mobile-thread [role="log"] {
+  display: grid;
+  gap: .75rem;
+}
+
+.veyron-mobile-thread p {
+  width: fit-content;
+  max-width: min(100%, 34rem);
+  margin: 0;
+  padding: .625rem .875rem;
+  border: 1px solid #415961;
+  border-radius: .875rem;
+  background: #223139;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.veyron-mobile-thread .veyron-mobile-sent {
+  justify-self: end;
+  border-color: #4a6d61;
+  background: #263f37;
+}
+
+.veyron-mobile-compose {
+  padding: .875rem 1rem max(1rem, env(safe-area-inset-bottom));
+  border-top: 1px solid #324349;
+}
+
+.veyron-mobile-compose > div {
+  display: flex;
+  align-items: flex-end;
+  gap: .5rem;
+  margin-top: .5rem;
+}
+
+.veyron-mobile-compose textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: .5rem .625rem;
+  resize: none;
+  font: inherit;
+  font-size: 16px;
+  color: inherit;
+  background: #10191d;
+  border: 1px solid #637b80;
+  border-radius: .625rem;
+}
+
+.veyron-mobile-compose button {
+  min-width: 3.25rem;
+  min-height: 44px;
+  font: inherit;
+  font-weight: 700;
+  color: #10241f;
+  background: #a5e7d2;
+  border: 0;
+  border-radius: .625rem;
+}
+
+.veyron-mobile-compose button:disabled {
+  opacity: .6;
+}
+
+.veyron-mobile :focus-visible {
+  outline: 2px solid #a5e7d2;
+  outline-offset: 3px;
+}
