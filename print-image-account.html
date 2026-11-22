@@ -3674,10 +3674,13 @@
     }
 
     let jobSaveInProgress = false;
-    els.form.addEventListener("submit", async event => {
+    els.form.addEventListener("submit", event => {
       event.preventDefault();
-      if(jobSaveInProgress)return;
-      const issueBill=event.submitter?.id === "saveJobAndBill";
+      return saveJob({issueBill:event.submitter?.id === "saveJobAndBill"});
+    });
+
+    async function saveJob({issueBill=false,veyronId=null}={}) {
+      if(jobSaveInProgress)return null;
       const billButton=document.getElementById("saveJobAndBill");
       jobSaveInProgress=true;els.form.inert=true;els.saveJob.disabled=true;billButton.disabled=true;
       try {
@@ -3690,7 +3693,7 @@
         : Math.min(existingRecord?.paidAmount || 0, calc.saleTotal);
       const nextBalanceTotal = Math.max(calc.saleTotal - nextPaidAmount, 0);
       const record = {
-        id: editingId || crypto.randomUUID(),
+        id: editingId || veyronId || crypto.randomUUID(),
         reference: existingRecord?.reference || "",
         date: els.jobDate.value,
         category: els.category.value,
@@ -3726,6 +3729,14 @@
       };
 
       if(typeof JobImages!=="undefined")await JobImages.attach(record,existingRecord);
+      if(veyronId){
+        if(!await sendToSheet(record))throw Error("ยังไม่ได้ตั้งค่าการบันทึกใน PrintImage");
+        records.push(record);
+        render();
+        resetForm();
+        toast("บันทึกใบงานจากเวย์รอนแล้ว");
+        return record;
+      }
       if (wasEditing) {
         records = records.map(item => item.id === editingId ? record : item);
       } else {
@@ -3745,9 +3756,62 @@
         toast("บันทึกในเครื่องแล้ว แต่ส่งเข้า Sheet ไม่สำเร็จ");
       }
       if(issueBill)await openSavedJobBill(record);
-      }catch(error){toast("บันทึกไม่สำเร็จ: "+error.message);}
+      return record;
+      }catch(error){toast("บันทึกไม่สำเร็จ: "+error.message);return null;}
       finally{jobSaveInProgress=false;els.form.inert=false;els.saveJob.disabled=false;billButton.disabled=false;}
-    });
+    }
+
+    function mountVeyronJob(){
+      const key=new URLSearchParams(location.hash.slice(1)).get("veyronJob");
+      const source=window.opener;
+      if(key!==null)history.replaceState(history.state,"",location.pathname+location.search);
+      if(!source||!/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i.test(key||""))return null;
+      const origins=["http://127.0.0.1:8787","http://localhost:8787"];
+      let incoming=null,authenticated=false,started=false;
+
+      async function create(){
+        if(!authenticated||!incoming||started)return;
+        started=true;
+        const {job,origin}=incoming;
+        let record=null;
+        try{
+          const loaded=await loadSheetPayload();
+          record=(loaded.records||[]).map(normalizeSheetRecord).find(item=>item.id===key);
+          if(!record){
+            resetForm(false);
+            els.customerType.value="ลูกค้าทั่วไป";
+            els.customerName.value=job.customer;
+            els.jobName.value=job.category;
+            els.category.value=job.category;
+            els.paymentStatus.value="ค้างจ่าย";
+            applyCategoryDefaults();
+            els.printSizeSelect.value="custom";
+            applyPrintSizeChoice("custom");
+            els.customPrintWidth.value=String(job.width*100);
+            els.customPrintLength.value=String(job.length*100);
+            applyCustomPrintSize();
+            refreshUxSelects();
+            record=await saveJob({veyronId:key});
+          }
+        }catch(error){toast("บันทึกใบงานจากเวย์รอนไม่สำเร็จ: "+error.message);}
+        source.postMessage({type:"PRINTIMAGE_VEYRON_JOB_RESULT",id:key,status:record?"saved":"failed",reference:record?.reference||""},origin);
+        autoLoadFromSheet();
+      }
+
+      function receive(event){
+        if(event.source!==source||!origins.includes(event.origin)||event.data?.type!=="VEYRON_PRINTIMAGE_JOB")return;
+        const job=event.data.job;
+        const dimension=value=>typeof value==="number"&&Number.isFinite(value)&&value>=0.001&&value<=1000&&Math.abs(value*1000-Math.round(value*1000))<1e-7;
+        if(job?.id!==key||typeof job.customer!=="string"||!job.customer.trim()||job.customer.length>120||
+          !["ไวนิล","สติ๊กเกอร์","งานพิมพ์"].includes(job.category)||!dimension(job.width)||!dimension(job.length))return;
+        window.removeEventListener("message",receive);
+        incoming={job:{...job,customer:job.customer.trim()},origin:event.origin};
+        void create();
+      }
+      window.addEventListener("message",receive);
+      for(const origin of origins)source.postMessage({type:"PRINTIMAGE_VEYRON_JOB_READY",id:key},origin);
+      return ()=>{authenticated=true;void create();};
+    }
 
     async function saveCustomerPayment(customerTypeValue, customerNameValue) {
       const candidates = filteredRecords()
@@ -3982,7 +4046,7 @@
     document.getElementById("printSelectedReceipt").addEventListener("click", printSelectedReceipt);
     document.getElementById("openInvoiceForm").addEventListener("click", openBlankInvoiceForm);
     document.getElementById("clearSelectedPayments").addEventListener("click", clearSelection);
-    WorkspaceAccess.mount(autoLoadFromSheet);
+    WorkspaceAccess.mount(mountVeyronJob() || autoLoadFromSheet);
   </script>
 </body>
 </html>
